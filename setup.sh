@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 echo "🔧 Git + GitHub Setup"
 echo "====================="
 echo ""
@@ -10,14 +8,14 @@ echo ""
 if ! command -v git &> /dev/null; then
     echo "❌ Git не установлен"
     echo ""
-    read -p "Установить через Homebrew? (y/n): " install_git
+    echo -n "Установить через Homebrew? (y/n): "
+    read -r install_git < /dev/tty
     if [ "$install_git" = "y" ]; then
         if command -v brew &> /dev/null; then
             brew install git
         else
             echo "❌ Homebrew не установлен. Установи git вручную:"
             echo "   xcode-select --install"
-            echo "   или brew install git"
             exit 1
         fi
     else
@@ -28,17 +26,11 @@ fi
 echo "✓ Git $(git --version | cut -d' ' -f3)"
 echo ""
 
-# Для работы через curl | bash
-if [ -t 0 ]; then
-    # Интерактивный режим
-    read -p "Введи имя (user.name): " username
-    read -p "Введи email: " email
-else
-    # Через pipe — читаем из /dev/tty
-    exec < /dev/tty
-    read -p "Введи имя (user.name): " username
-    read -p "Введи email: " email
-fi
+# Читаем данные
+echo -n "Введи имя (user.name): "
+read -r username < /dev/tty
+echo -n "Введи email: "
+read -r email < /dev/tty
 
 # Проверка
 if [ -z "$username" ] || [ -z "$email" ]; then
@@ -56,23 +48,21 @@ git config --global user.email "$email"
 key_file="$HOME/.ssh/id_ed25519"
 
 if [ -f "$key_file" ]; then
-    if [ -t 0 ] || [ -t 2 ]; then
-        exec < /dev/tty
-        read -p "⚠️  SSH ключ уже существует. Перезаписать? (y/n): " overwrite
-        if [ "$overwrite" != "y" ]; then
-            echo "Использую существующий ключ"
-        else
-            ssh-keygen -t ed25519 -C "$email" -f "$key_file" -N ""
-        fi
-    else
+    echo -n "⚠️  SSH ключ уже существует. Перезаписать? (y/n): "
+    read -r overwrite < /dev/tty
+    if [ "$overwrite" != "y" ]; then
         echo "Использую существующий ключ"
+    else
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        ssh-keygen -t ed25519 -C "$email" -f "$key_file" -N "" < /dev/null
     fi
 else
     echo ""
     echo "🔑 Генерирую SSH ключ..."
     mkdir -p ~/.ssh
     chmod 700 ~/.ssh
-    ssh-keygen -t ed25519 -C "$email" -f "$key_file" -N ""
+    ssh-keygen -t ed25519 -C "$email" -f "$key_file" -N "" < /dev/null
 fi
 
 # Права на ключ
@@ -81,7 +71,7 @@ chmod 644 "$key_file.pub"
 
 # Добавляем в ssh-agent
 eval "$(ssh-agent -s)" > /dev/null 2>&1
-ssh-add "$key_file" 2>/dev/null
+ssh-add "$key_file" 2>/dev/null || true
 
 # Настраиваем подпись коммитов
 git config --global gpg.format ssh
@@ -98,9 +88,9 @@ cat "$key_file.pub"
 echo "==========================================="
 echo ""
 
-# Копируем в буфер если доступен pbcopy
+# Копируем в буфер
 if command -v pbcopy &> /dev/null; then
-    pbcopy < "$key_file.pub"
+    cat "$key_file.pub" | pbcopy
     echo "📎 Ключ скопирован в буфер обмена"
     echo ""
 fi
